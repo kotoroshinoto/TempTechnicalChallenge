@@ -6,6 +6,7 @@ from typing import List
 
 class ExAC:
 	# turn vcf fields into an identifier string for the variant
+	@staticmethod
 	def make_keystring_for_vcfentry(entry: vcfrecord):
 		return ["%s-%s-%s-%s" % (entry.CHROM, entry.POS, entry.REF, x) for x in entry.ALT]
 
