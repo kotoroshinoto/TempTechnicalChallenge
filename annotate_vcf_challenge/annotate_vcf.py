@@ -18,12 +18,9 @@ def add_exac_var(varstr, defval=None):
 	if defval is not None:
 		exac_defaults[varstr] = defval
 
+# TODO decide if any additional information available from EXAC is relevant enough to add by default
 #by default we want the allele frequency
 add_exac_var('variant.allele_freq', 0.0)
-
-
-def add_exac_var_callback(ctx, param, value):
-	print("param: %s\tvalue:%s" % (param.name, value))
 
 
 class AnnotationRecord:
@@ -35,7 +32,6 @@ class AnnotationRecord:
 		self.var_support = 0
 		self.var_support_percent = 0.0
 		self.exac_data = None
-		# TODO decide if any additional information available from EXAC is relevant
 
 	def __str__(self):
 		cols = [self.varkey.replace('-',"\t"), self.depth,
