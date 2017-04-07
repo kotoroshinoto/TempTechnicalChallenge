@@ -5,6 +5,33 @@ from typing import List
 
 
 class ExAC:
+	@staticmethod
+	def normalize_keystring(keystr: str):
+		splitstr = keystr.split('-')
+		chrom = splitstr[0]
+		pos = int(splitstr[1])
+		ref = splitstr[2]
+		alt = splitstr[3]
+		num_trunc = 0
+		for i in range(1, min(len(ref), len(alt))):
+			if ref[len(ref) - i] == alt[len(alt)-i]:
+				num_trunc += 1
+				continue
+			else:
+				break
+		if num_trunc > 0:
+			ref = ref[:-num_trunc]
+			alt = alt[:-num_trunc]
+		num_trunc = 0
+		for i in range(0, min(len(ref)-1, len(alt)-1)):
+			if ref[i] == alt[i]:
+				num_trunc += 1
+		if num_trunc > 0:
+			ref = ref[num_trunc:]
+			alt = alt[num_trunc:]
+			pos += num_trunc
+		return "%s-%d-%s-%s" % (chrom, pos, ref, alt)
+
 	# turn vcf fields into an identifier string for the variant
 	@staticmethod
 	def make_keystring_for_vcfentry(entry: vcfrecord):

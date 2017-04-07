@@ -24,7 +24,7 @@ add_exac_var('variant.allele_freq', 0.0)
 
 
 class AnnotationRecord:
-	def __init__(self, varstring:str):
+	def __init__(self, varstring: str):
 		self.varkey = varstring
 		self.depth = 0
 		self.ref_support = 0
@@ -48,7 +48,7 @@ class AnnotationRecord:
 		records = []
 		#create one entry per alt, otherwise we're treating multiple variant definitions as if they were a single variant
 		for i in range(len(entry.ALT)):
-			keystr = keystr_list[i]
+			keystr = ExAC.normalize_keystring(keystr_list[i])
 			record = cls(keystr)
 			# print(keystr, file=output_handle)
 			# print(entry.INFO, file=output_handle)
@@ -63,6 +63,7 @@ class AnnotationRecord:
 			record.var_support = entry.INFO['AO'][i]
 			# calculate read percentage contributing to alt
 			record.var_support_percent = float(record.var_support) / float(record.depth)
+			# TODO determine variant type
 			#add record to list
 			records.append(record)
 		#return record list
@@ -150,8 +151,6 @@ OUTPUT optional; path to output, will default to sys.stdout
 
 	#read in vcf contents
 	keystrings, records = read_vcf(filename)
-
-	#TODO determine variant type
 
 	#pull json data from ExAC
 	json_data = ExAC.get_bulk_variant_data(keystrings)
