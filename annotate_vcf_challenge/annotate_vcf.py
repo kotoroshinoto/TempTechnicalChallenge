@@ -6,7 +6,7 @@ import click
 import vcf
 from vcf.model import _Record as vcfrecord
 
-from annotate_vcf_challenge.exac_interface import make_keystring_for_vcfentry, ExAC, ExAC_VariantData
+from annotate_vcf_challenge.exac_interface import ExAC
 
 output_handle = None
 exac_vars = list()
@@ -47,23 +47,29 @@ class AnnotationRecord:
 
 	@classmethod
 	def from_vcf_entry(cls, entry: vcfrecord):
-		keystr_list = make_keystring_for_vcfentry(entry)
+		#keystrings are of the format ExAC expects for variants: chrom-pos-ref-alt
+		keystr_list = ExAC.make_keystring_for_vcfentry(entry)
 		records = []
-		# freqs = ExAC.get_variant_frequencies(keystr_list)
+		#create one entry per alt, otherwise we're treating multiple variant definitions as if they were a single variant
 		for i in range(len(entry.ALT)):
 			keystr = keystr_list[i]
 			record = cls(keystr)
 			# print(keystr, file=output_handle)
 			# print(entry.INFO, file=output_handle)
 			# print(entry.samples, file=output_handle)
+			#get read depth for variant location:
 			record.depth = entry.INFO['DP']
+			#get read observation count
 			record.ref_support = entry.INFO['RO']
+			#calculate read percentage contributing to ref
 			record.ref_support_percent = float(record.ref_support) / float(record.depth)
+			#get alt observation count
 			record.var_support = entry.INFO['AO'][i]
+			# calculate read percentage contributing to alt
 			record.var_support_percent = float(record.var_support) / float(record.depth)
-			# record.var_exac_frequency = freqs[i]
+			#add record to list
 			records.append(record)
-		# TODO poll ExAC for information
+		#return record list
 		return records
 
 
@@ -94,32 +100,19 @@ def handle_field_args(exac_fields, exac_field_default):
 			add_exac_var(field)
 
 
-def read_vcf(filename):
-	rdr = vcf.Reader(fsock=filename)
-	# metakeys = list(rdr.metadata.keys())
-	# print("META ENTRIES")
-	# for key in metakeys:
-	# 	print("%s\t%s" % (key, rdr.metadata[key]))
-	# formatkeys = list(rdr.formats.keys())
-	# print("FORMAT ENTRIES")
-	# for key in formatkeys:
-	# 	fmt = rdr.formats[key]
-	# 	print("%s\t%s\t%s" % (key, fmt.type, fmt.desc))
-	# infokeys = list(rdr.infos.keys())
-	# print("INFO ENTRIES")
-	# for key in infokeys:
-	# 	inf = rdr.infos[key]
-	# 	print("%s\t%s\t%s" % (key, inf.type, inf.desc))
-	# entry = next(rdr)
+def read_vcf(file_handle):
+	#use vcf reader from pyvcf
+	rdr = vcf.Reader(fsock=file_handle)
 	# read the vcf entries from the file
 	keystrings = []  # type: List[str]
 	records = []  # type: List[AnnotationRecord]
 	# get records from vcf file
 	for entry in rdr:
-		annrec = AnnotationRecord.from_vcf_entry(entry)
-		for ann in annrec:
-			records.append(ann)
-			keystrings.append(ann.varkey)
+		records_from_vcf_entry = AnnotationRecord.from_vcf_entry(entry)
+		for record in records_from_vcf_entry:
+			records.append(record)
+			#keystrings are of the format ExAC expects for variants: chrom-pos-ref-alt
+			keystrings.append(record.varkey)
 	return keystrings, records
 
 
@@ -139,7 +132,7 @@ def update_records_with_exac_data(keystrings, records, json_data):
 		keystr = keystrings[i]
 		record = records[i]
 		json_record = json_data[keystr]
-		record.exac_data = ExAC_VariantData(exac_vars, exac_defaults, json_record)
+		record.exac_data = ExAC.VariantData(exac_vars, exac_defaults, json_record)
 
 
 @click.command(context_settings=dict(max_content_width=shutil.get_terminal_size().columns))
