@@ -1,9 +1,11 @@
 import sys
+from typing import List
+
 import click
 import vcf
-from exac_interface import make_keystring_for_vcfentry, ExAC, ExAC_VariantData
 from vcf.model import _Record as vcfrecord
-from typing import List
+
+from annotate_vcf_challenge.exac_interface import make_keystring_for_vcfentry, ExAC, ExAC_VariantData
 
 output_handle = None
 exac_vars = list()
@@ -14,6 +16,7 @@ def add_exac_var(varstr, defval=None):
 	exac_vars.append(varstr)
 	if defval is not None:
 		exac_defaults[varstr] = defval
+
 #by default we want the allele frequency
 add_exac_var('variant.allele_freq', 0.0)
 
@@ -63,17 +66,7 @@ class AnnotationRecord:
 		return records
 
 
-@click.command()
-@click.argument('filename', type=click.File('r'))
-@click.argument('output', type=click.File('w'), default=sys.stdout, required=False)
-@click.option('--exac-fields', '-e', type=str, default=None, help="csv of exac fields to include")
-@click.option('--exac-field-default', '-d', type=(str, str), multiple=True, default=None, required=False, help='supply default value for exac fields')
-def annotate(filename, output, exac_fields, exac_field_default):
-	"""
-Annotate entries in a vcf file\n
-FILENAME required; path to an input vcf file\n
-OUTPUT optional; path to output, will default to sys.stdout
-"""
+def handle_field_args(exac_fields, exac_field_default):
 	if exac_fields is not None:
 		exac_fields = exac_fields.split(',')
 	else:
@@ -99,7 +92,8 @@ OUTPUT optional; path to output, will default to sys.stdout
 		else:
 			add_exac_var(field)
 
-	output_handle = output
+
+def read_vcf(filename):
 	rdr = vcf.Reader(fsock=filename)
 	# metakeys = list(rdr.metadata.keys())
 	# print("META ENTRIES")
@@ -119,20 +113,16 @@ OUTPUT optional; path to output, will default to sys.stdout
 	# read the vcf entries from the file
 	keystrings = []  # type: List[str]
 	records = []  # type: List[AnnotationRecord]
-	#get records from vcf file
+	# get records from vcf file
 	for entry in rdr:
 		annrec = AnnotationRecord.from_vcf_entry(entry)
 		for ann in annrec:
 			records.append(ann)
 			keystrings.append(ann.varkey)
-	#pull json data from ExAC
-	json_data = ExAC.get_bulk_variant_data(keystrings)
-	#use json data to fill values into records
-	for i in range(len(keystrings)):
-		keystr = keystrings[i]
-		record = records[i]
-		json_record = json_data[keystr]
-		record.exac_data = ExAC_VariantData(exac_vars, exac_defaults, json_record)
+	return keystrings, records
+
+
+def write_result(records):
 	#print filled records
 	exac_var_headers = []
 	for var in exac_vars:
@@ -141,6 +131,44 @@ OUTPUT optional; path to output, will default to sys.stdout
 	print("\t".join(cols), file=output_handle)
 	for record in records:
 		print(str(record), file=output_handle)
+
+
+def update_records_with_exac_data(keystrings, records, json_data):
+	for i in range(len(keystrings)):
+		keystr = keystrings[i]
+		record = records[i]
+		json_record = json_data[keystr]
+		record.exac_data = ExAC_VariantData(exac_vars, exac_defaults, json_record)
+
+
+@click.command()
+@click.argument('filename', type=click.File('r'))
+@click.argument('output', type=click.File('w'), default=sys.stdout, required=False)
+@click.option('--exac-fields', '-e', type=str, default=None, help="csv of exac fields to include")
+@click.option('--exac-field-default', '-d', type=(str, str), multiple=True, default=None, required=False, help='supply default value for exac fields')
+def annotate(filename, output, exac_fields, exac_field_default):
+	"""
+Annotate entries in a vcf file\n
+FILENAME required; path to an input vcf file\n
+OUTPUT optional; path to output, will default to sys.stdout
+"""
+	global output_handle
+	output_handle = output
+
+	#add any additional requested ExAC fields
+	handle_field_args(exac_fields, exac_field_default)
+
+	#read in vcf contents
+	keystrings, records = read_vcf(filename)
+
+	#pull json data from ExAC
+	json_data = ExAC.get_bulk_variant_data(keystrings)
+
+	#use json data to fill values into records
+	update_records_with_exac_data(keystrings, records, json_data)
+
+	#output records
+	write_result(records)
 
 if __name__ == "__main__":
 	annotate()

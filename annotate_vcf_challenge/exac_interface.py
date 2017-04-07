@@ -1,9 +1,6 @@
-import vcf
-import sys
 from vcf.model import _Record as vcfrecord
 import requests
 import json
-from pprint import pprint
 from typing import List
 
 
