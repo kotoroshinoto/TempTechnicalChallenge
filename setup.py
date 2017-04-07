@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
 import sys
 import os
 from setuptools import setup, find_packages
 from pip.req import parse_requirements
 
-if sys.version_info.major < 3:
-	print("I'm only for python 3, please upgrade")
+if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_info[1] < 3):
+	print("I'm only for python >= 3.3, please upgrade")
 	sys.exit(1)
 
 install_reqs = parse_requirements(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'requirements.txt'), session=False)

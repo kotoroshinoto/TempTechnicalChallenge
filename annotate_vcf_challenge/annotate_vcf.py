@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 import sys
 from typing import List
-
+import shutil
 import click
 import vcf
 from vcf.model import _Record as vcfrecord
@@ -141,11 +142,11 @@ def update_records_with_exac_data(keystrings, records, json_data):
 		record.exac_data = ExAC_VariantData(exac_vars, exac_defaults, json_record)
 
 
-@click.command()
+@click.command(context_settings=dict(max_content_width=shutil.get_terminal_size().columns))
 @click.argument('filename', type=click.File('r'))
 @click.argument('output', type=click.File('w'), default=sys.stdout, required=False)
-@click.option('--exac-fields', '-e', type=str, default=None, help="csv of exac fields to include")
-@click.option('--exac-field-default', '-d', type=(str, str), multiple=True, default=None, required=False, help='supply default value for exac fields')
+@click.option('--exac-fields', '-e', type=str, default=None, help="csv of additional exac fields to include, formatted: parent.child.grandchild, as if from: http://exac.hms.harvard.edu/rest/variant")
+@click.option('--exac-field-default', '-d', type=(str, str), multiple=True, default=None, required=False, help='supply default value for exac field:  <FIELD VALUE>')
 def annotate(filename, output, exac_fields, exac_field_default):
 	"""
 Annotate entries in a vcf file\n
@@ -160,6 +161,8 @@ OUTPUT optional; path to output, will default to sys.stdout
 
 	#read in vcf contents
 	keystrings, records = read_vcf(filename)
+
+	#TODO determine variant type
 
 	#pull json data from ExAC
 	json_data = ExAC.get_bulk_variant_data(keystrings)
