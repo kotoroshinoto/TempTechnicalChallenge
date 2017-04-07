@@ -26,6 +26,8 @@ class ExAC:
 		for i in range(0, min(len(ref)-1, len(alt)-1)):
 			if ref[i] == alt[i]:
 				num_trunc += 1
+			else:
+				break
 		if num_trunc > 0:
 			ref = ref[num_trunc:]
 			alt = alt[num_trunc:]
