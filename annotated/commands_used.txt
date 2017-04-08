@@ -1,0 +1,5 @@
+#no extra fields
+annotate_vcf_challenge --cache data/Challenge_data-2.vcf annotated/Challenge_data-2.default.txt  -v
+
+#with variant_genes
+annotate_vcf_challenge --cache data/Challenge_data-2.vcf annotated/Challenge_data-2.with_genes.txt  -v --exac-fields variant.genes
