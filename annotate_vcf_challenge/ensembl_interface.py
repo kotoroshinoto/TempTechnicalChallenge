@@ -53,7 +53,7 @@ class Ensembl:
 					r = requests.post(url, headers=headers, data=data)
 					j = r.json()
 					if not isinstance(j, list):
-						raise RuntimeError("Did not get a dict from json request!")
+						raise RuntimeError("Did not get a list from json request! There may have been an error")
 					for element in j:
 						result.append(element)
 				buff = []
@@ -65,7 +65,7 @@ class Ensembl:
 			r = requests.post(url, headers=headers, data=data)
 			j = r.json()
 			if not isinstance(j, list):
-				raise RuntimeError("Did not get a dict from json request!")
+				raise RuntimeError("Did not get a list from json request! There may have been an error")
 			for element in j:
 				result.append(element)
 		return result

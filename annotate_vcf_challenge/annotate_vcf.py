@@ -9,7 +9,6 @@ from annotate_vcf_challenge.exac_interface import ExAC
 from annotate_vcf_challenge.ensembl_interface import Ensembl
 import json
 import os.path
-from pprint import pprint
 OUTPUT = None
 VERBOSE = None
 CACHE = None
@@ -94,6 +93,8 @@ class AnnotationRecord:
 
 
 def handle_field_args(exac_fields, exac_field_default):
+	#make sure there are no repeats within the argument, or duplicate requests for automatically supplied columns
+	#also make sure all default fields correspond to a requested field
 	if exac_fields is not None:
 		exac_fields = exac_fields.split(',')
 	else:

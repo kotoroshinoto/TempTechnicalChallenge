@@ -144,3 +144,5 @@ challenge_pdf
 test
 genes
 genome
+last_ensembl_vep.json
+last_exac.json
