@@ -2,16 +2,78 @@ from vcf.model import _Record as vcfrecord
 import requests
 import json
 from typing import List
+import annotate_vcf_challenge.json_func as json_func
+
+consequence_severity = {
+	'intergenic_variant': 0,
+	'feature_truncation': 1,
+	'regulatory_region_variant': 2,
+	'feature_elongation': 3,
+	'regulatory_region_amplification': 4,
+	'regulatory_region_ablation': 5,
+	'TF_binding_site_variant': 6,
+	'TFBS_amplification': 7,
+	'TFBS_ablation': 8,
+	'downstream_gene_variant': 9,
+	'upstream_gene_variant': 10,
+	'non_coding_transcript_variant': 11,
+	'NMD_transcript_variant': 12,
+	'intron_variant': 13,
+	'non_coding_transcript_exon_variant': 14,
+	'3_prime_UTR_variant': 15,
+	'5_prime_UTR_variant': 16,
+	'mature_miRNA_variant': 17,
+	'coding_sequence_variant': 18,
+	'synonymous_variant': 19,
+	'stop_retained_variant': 20,
+	'incomplete_terminal_codon_variant': 21,
+	'splice_region_variant': 22,
+	'protein_altering_variant': 23,
+	'missense_variant': 24,
+	'inframe_deletion': 25,
+	'inframe_insertion': 26,
+	'transcript_amplification': 27,
+	'start_lost': 28,
+	'stop_lost': 29,
+	'frameshift_variant': 30,
+	'stop_gained': 31,
+	'splice_donor_variant': 32,
+	'splice_acceptor_variant': 33,
+	'transcript_ablation': 34
+}
 
 
 class ExAC:
 	@staticmethod
-	def normalize_keystring(keystr: str):
-		splitstr = keystr.split('-')
+	def split_keystring(keystring:str):
+		splitstr = keystring.split('-')
 		chrom = splitstr[0]
 		pos = int(splitstr[1])
 		ref = splitstr[2]
 		alt = splitstr[3]
+		return chrom, pos, ref, alt
+
+	@staticmethod
+	def get_most_severe_conseqeuence(variant, json_data):
+		json_entry = json_data[variant]
+		vep_annotations = json_func.expand_json_var(json_entry, "variant.vep_annotations")
+		if vep_annotations is None:
+			return None
+		worst = None
+		worst_val = -1
+		for annotation in vep_annotations:
+			cons = annotation['major_consequence']
+			if cons not in consequence_severity:
+				raise ValueError("consequence not recognized: '%s'" % cons)
+			cons_val = consequence_severity[cons]
+			if cons_val > worst_val:
+				worst = cons
+				worst_val = cons_val
+		return worst
+
+	@staticmethod
+	def normalize_keystring(keystr: str):
+		chrom, pos, ref, alt = ExAC.split_keystring(keystr)
 		num_trunc = 0
 		for i in range(1, min(len(ref), len(alt))):
 			if ref[len(ref) - i] == alt[len(alt)-i]:
@@ -55,28 +117,13 @@ class ExAC:
 		else:
 			return "%s%s" % (ExAC.exac_base_url, ("/rest/bulk/variant/%s" % specifier))
 
-	@staticmethod
-	def expand_json_var(json_data, var: str):
-		#string of format parent.child.grandchild split into keys for json dict
-		levels = var.split(".")
-		curr = json_data
-		#index into successive dicts
-		for lvl in levels:
-			if lvl in curr:
-				curr = curr[lvl]
-			else:
-				#if target key doesn't exist, return None, caller will handle condition
-				return None
-		#after all levels are traversed, we have the value we need
-		return curr
-
 	class VariantData:
 		def __init__(self, varlist, defaults, json_data):
 			self.vals = []
 			#for each requested ExAC variable
 			for var in varlist:
 				#get required value from json data
-				var_val = ExAC.expand_json_var(json_data, var)
+				var_val = json_func.expand_json_var(json_data, var)
 				#if the value is missing from json data and there is a default defined, use that
 				if (var_val is None) and (var in defaults):
 					self.vals.append(defaults[var])

@@ -5,10 +5,14 @@ import shutil
 import click
 import vcf
 from vcf.model import _Record as vcfrecord
-
 from annotate_vcf_challenge.exac_interface import ExAC
-
-output_handle = None
+from annotate_vcf_challenge.ensembl_interface import Ensembl
+import json
+import os.path
+from pprint import pprint
+OUTPUT = None
+VERBOSE = None
+CACHE = None
 exac_vars = list()
 exac_defaults = dict()
 
@@ -31,12 +35,27 @@ class AnnotationRecord:
 		self.ref_support_percent = 0.0
 		self.var_support = 0
 		self.var_support_percent = 0.0
+		self.type = None
+		self.most_severe_consequence = None
 		self.exac_data = None
+
+	@staticmethod
+	def get_column_headings():
+		exac_var_headers = []
+		for var in exac_vars:
+			exac_var_headers.append("ExAC_%s" % (var.replace('.', '_')))
+		return "\t".join(["chrom", "pos", "ref", "alt", "depth", "ref_supporting_reads", "ref_support_percent",
+		                  "var_supporting_reads", "var_support_percent", "variant_type", "most_severe_consequence",
+		                  "\t".join(exac_var_headers)])
 
 	def __str__(self):
 		cols = [self.varkey.replace('-',"\t"), self.depth,
 		        self.ref_support, self.ref_support_percent,
-		        self.var_support, self.var_support_percent]
+		        self.var_support, self.var_support_percent, self.type]
+		if self.most_severe_consequence is None:
+			cols.append('-')
+		else:
+			cols.append(self.most_severe_consequence)
 		if self.exac_data is not None:
 			cols.append(self.exac_data)
 		return "\t".join(str(x) for x in cols)
@@ -48,6 +67,7 @@ class AnnotationRecord:
 		records = []
 		#create one entry per alt, otherwise we're treating multiple variant definitions as if they were a single variant
 		for i in range(len(entry.ALT)):
+			#need to adjust keystring to remove excess matching text, allowing exac to match properly
 			keystr = ExAC.normalize_keystring(keystr_list[i])
 			record = cls(keystr)
 			# print(keystr, file=output_handle)
@@ -61,6 +81,8 @@ class AnnotationRecord:
 			record.ref_support_percent = float(record.ref_support) / float(record.depth)
 			#get alt observation count
 			record.var_support = entry.INFO['AO'][i]
+			#get INFO type field
+			record.type = entry.INFO['TYPE'][i]
 			# calculate read percentage contributing to alt
 			record.var_support_percent = float(record.var_support) / float(record.depth)
 			# TODO determine variant type
@@ -102,6 +124,7 @@ def read_vcf(file_handle):
 	rdr = vcf.Reader(fsock=file_handle)
 	# read the vcf entries from the file
 	keystrings = []  # type: List[str]
+	ensembl_keystrings = []  # type: List[str]
 	records = []  # type: List[AnnotationRecord]
 	# get records from vcf file
 	for entry in rdr:
@@ -110,26 +133,65 @@ def read_vcf(file_handle):
 			records.append(record)
 			#keystrings are of the format ExAC expects for variants: chrom-pos-ref-alt
 			keystrings.append(record.varkey)
-	return keystrings, records
+			ensembl_keystrings.append(Ensembl.convert_exac_keystring_for_post(record.varkey))
+	return keystrings, ensembl_keystrings, records
 
 
 def write_result(records):
 	#print filled records
-	exac_var_headers = []
-	for var in exac_vars:
-		exac_var_headers.append("ExAC_%s" % (var.replace('.', '_')))
-	cols = ["chrom", "pos", "ref", "alt", "depth", "ref_supporting_reads", "ref_support_percent", "var_supporting_reads", "var_support_percent", "\t".join(exac_var_headers)]
-	print("\t".join(cols), file=output_handle)
+	cols = AnnotationRecord.get_column_headings()
+	print(cols, file=OUTPUT)
 	for record in records:
-		print(str(record), file=output_handle)
+		print(str(record), file=OUTPUT)
 
 
 def update_records_with_exac_data(keystrings, records, json_data):
 	for i in range(len(keystrings)):
 		keystr = keystrings[i]
-		record = records[i]
+		record = records[i]  # type: AnnotationRecord
 		json_record = json_data[keystr]
 		record.exac_data = ExAC.VariantData(exac_vars, exac_defaults, json_record)
+		# record.most_severe_consequence = ExAC.get_most_severe_conseqeuence(keystr, json_data)
+
+
+def update_records_with_ensembl_data(keystrings, records, json_data):
+	for i in range(len(keystrings)):
+		keystr = keystrings[i]  # type: str
+		record = records[i]  # type: AnnotationRecord
+		json_record = json_data[i]
+		if json_record['input'] != keystr:
+			raise RuntimeError("record input doesn't match keystring")
+		record.most_severe_consequence = json_record['most_severe_consequence']
+
+
+def obtain_exac_data(keystrings: 'List[str]'):
+	exac_cache_fname = 'last_exac.json'
+	if CACHE and os.path.isfile(exac_cache_fname):
+		infile = open(exac_cache_fname, 'r')
+		json_data = json.load(infile)
+		infile.close()
+	else:
+		json_data = ExAC.get_bulk_variant_data(keystrings)
+		if CACHE:
+			outfile = open(exac_cache_fname, 'w')
+			json.dump(json_data, outfile)
+			outfile.close()
+	return json_data
+
+
+def obtain_ensembl_data(ensembl_keystrings: 'List[str]'):
+	ensembl_cache_fname = 'last_ensembl_vep.json'
+	if CACHE and os.path.isfile(ensembl_cache_fname):
+		infile = open(ensembl_cache_fname, 'r')
+		ensembl_json_data = json.load(infile)
+		infile.close()
+	else:
+		ensembl_json_data = (Ensembl.get_bulk_variant_data(ensembl_keystrings))
+		if CACHE:
+			outfile = open(ensembl_cache_fname, 'w')
+			json.dump(ensembl_json_data, outfile)
+			outfile.close()
+	return ensembl_json_data
 
 
 @click.command(context_settings=dict(max_content_width=shutil.get_terminal_size().columns))
@@ -137,26 +199,38 @@ def update_records_with_exac_data(keystrings, records, json_data):
 @click.argument('output', type=click.File('w'), default=sys.stdout, required=False)
 @click.option('--exac-fields', '-e', type=str, default=None, help="csv of additional exac fields to include, formatted: parent.child.grandchild, as if from: http://exac.hms.harvard.edu/rest/variant")
 @click.option('--exac-field-default', '-d', type=(str, str), multiple=True, default=None, required=False, help='supply default value for exac field:  <FIELD VALUE>')
-def annotate(filename, output, exac_fields, exac_field_default):
+@click.option('--cache', '-c', default=False, is_flag=True)
+@click.option('--verbose', '-v', default=False,  is_flag=True)
+def annotate(filename, output, exac_fields, exac_field_default, cache, verbose):
 	"""
 Annotate entries in a vcf file\n
 FILENAME required; path to an input vcf file\n
 OUTPUT optional; path to output, will default to sys.stdout
 """
-	global output_handle
-	output_handle = output
+	global OUTPUT
+	global VERBOSE
+	global CACHE
+	OUTPUT = output
+	VERBOSE = verbose
+	CACHE = cache
 
 	#add any additional requested ExAC fields
 	handle_field_args(exac_fields, exac_field_default)
 
 	#read in vcf contents
-	keystrings, records = read_vcf(filename)
+	keystrings, ensembl_keystrings, records = read_vcf(filename)
 
 	#pull json data from ExAC
-	json_data = ExAC.get_bulk_variant_data(keystrings)
+	json_data = obtain_exac_data(keystrings)
 
 	#use json data to fill values into records
 	update_records_with_exac_data(keystrings, records, json_data)
+
+	#get variant prediction data from ensembl
+	ensembl_json_data = obtain_ensembl_data(ensembl_keystrings)
+
+	#use json data to supply variant effect predictions
+	update_records_with_ensembl_data(ensembl_keystrings, records, ensembl_json_data)
 
 	#output records
 	write_result(records)
