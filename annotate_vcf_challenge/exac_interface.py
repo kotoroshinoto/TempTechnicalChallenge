@@ -128,7 +128,10 @@ class ExAC:
 				if (var_val is None) and (var in defaults):
 					self.vals.append(defaults[var])
 				else:
-					self.vals.append(var_val)
+					if isinstance(var_val, list):
+						self.vals.append(",".join(str(x) for x in var_val))
+					else:
+						self.vals.append(var_val)
 
 		def __str__(self):
 			return "\t".join(str(x) for x in self.vals)
