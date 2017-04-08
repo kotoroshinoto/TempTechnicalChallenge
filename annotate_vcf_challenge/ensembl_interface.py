@@ -36,7 +36,7 @@ class Ensembl:
 		return requests.get(url, headers=headers)
 
 	@staticmethod
-	def get_bulk_variant_data(keystr_list: 'List[str]'):
+	def get_bulk_variant_data(keystr_list: 'List[str]', verbose=False):
 		headers ={"Content-Type": "application/json", 'Accept': 'application/json'}
 		url = Ensembl.get_vep_variant_bulk_url()
 		#can only handle 300 at once
@@ -48,7 +48,7 @@ class Ensembl:
 			#we have 300 in buff, perform query and reset buff
 			if i % 300 == 0:
 				if len(buff) > 0:
-					print("record %d of %d" % (i, numrec))
+					print("record %d of %d" % (i, numrec)) if verbose else None
 					data = json.dumps({'variants': buff})
 					r = requests.post(url, headers=headers, data=data)
 					j = r.json()
@@ -60,7 +60,7 @@ class Ensembl:
 			buff.append(keystr_list[i])
 		#perform last query
 		if len(buff) > 0:
-			print("record %d of %d" % (i + 1, numrec))
+			print("record %d of %d" % (i + 1, numrec)) if verbose else None
 			data = json.dumps({'variants': buff})
 			r = requests.post(url, headers=headers, data=data)
 			j = r.json()

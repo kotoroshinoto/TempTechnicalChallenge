@@ -13,6 +13,7 @@ from pprint import pprint
 OUTPUT = None
 VERBOSE = None
 CACHE = None
+REFRESH = None
 exac_vars = list()
 exac_defaults = dict()
 
@@ -120,6 +121,7 @@ def handle_field_args(exac_fields, exac_field_default):
 
 
 def read_vcf(file_handle):
+	sys.stderr.write("Reading VCF ...") if VERBOSE else None
 	#use vcf reader from pyvcf
 	rdr = vcf.Reader(fsock=file_handle)
 	# read the vcf entries from the file
@@ -134,27 +136,33 @@ def read_vcf(file_handle):
 			#keystrings are of the format ExAC expects for variants: chrom-pos-ref-alt
 			keystrings.append(record.varkey)
 			ensembl_keystrings.append(Ensembl.convert_exac_keystring_for_post(record.varkey))
+	print(" done", file=sys.stderr) if VERBOSE else None
 	return keystrings, ensembl_keystrings, records
 
 
 def write_result(records):
 	#print filled records
+	sys.stderr.write("Writing table to file: '%s' ..." % OUTPUT.name) if VERBOSE else None
 	cols = AnnotationRecord.get_column_headings()
 	print(cols, file=OUTPUT)
 	for record in records:
 		print(str(record), file=OUTPUT)
+	print(" done", file=sys.stderr) if VERBOSE else None
 
 
 def update_records_with_exac_data(keystrings, records, json_data):
+	sys.stderr.write("integrating ExAC data into records ...") if VERBOSE else None
 	for i in range(len(keystrings)):
 		keystr = keystrings[i]
 		record = records[i]  # type: AnnotationRecord
 		json_record = json_data[keystr]
 		record.exac_data = ExAC.VariantData(exac_vars, exac_defaults, json_record)
 		# record.most_severe_consequence = ExAC.get_most_severe_conseqeuence(keystr, json_data)
+	print(" done", file=sys.stderr) if VERBOSE else None
 
 
 def update_records_with_ensembl_data(keystrings, records, json_data):
+	sys.stderr.write("integrating Ensembl VEP data into records ...") if VERBOSE else None
 	for i in range(len(keystrings)):
 		keystr = keystrings[i]  # type: str
 		record = records[i]  # type: AnnotationRecord
@@ -162,36 +170,58 @@ def update_records_with_ensembl_data(keystrings, records, json_data):
 		if json_record['input'] != keystr:
 			raise RuntimeError("record input doesn't match keystring")
 		record.most_severe_consequence = json_record['most_severe_consequence']
+	print(" done", file=sys.stderr) if VERBOSE else None
 
 
 def obtain_exac_data(keystrings: 'List[str]'):
 	exac_cache_fname = 'last_exac.json'
-	if CACHE and os.path.isfile(exac_cache_fname):
+	if CACHE and os.path.isfile(exac_cache_fname) and (not REFRESH):
+		sys.stderr.write("Reading ExAC data from cache ...") if VERBOSE else None
 		infile = open(exac_cache_fname, 'r')
 		json_data = json.load(infile)
 		infile.close()
 	else:
+		sys.stderr.write("Getting ExAC data from server ...") if VERBOSE else None
 		json_data = ExAC.get_bulk_variant_data(keystrings)
+		print(" done", file=sys.stderr) if VERBOSE else None
 		if CACHE:
+			sys.stderr.write("Writng ExAC data to cache ...") if VERBOSE else None
 			outfile = open(exac_cache_fname, 'w')
 			json.dump(json_data, outfile)
 			outfile.close()
+	print(" done", file=sys.stderr) if VERBOSE else None
 	return json_data
 
 
 def obtain_ensembl_data(ensembl_keystrings: 'List[str]'):
 	ensembl_cache_fname = 'last_ensembl_vep.json'
-	if CACHE and os.path.isfile(ensembl_cache_fname):
+	if CACHE and os.path.isfile(ensembl_cache_fname) and (not REFRESH):
+		sys.stderr.write("Reading Ensembl VEP data from cache ...") if VERBOSE else None
 		infile = open(ensembl_cache_fname, 'r')
 		ensembl_json_data = json.load(infile)
 		infile.close()
 	else:
-		ensembl_json_data = (Ensembl.get_bulk_variant_data(ensembl_keystrings))
+		print("Getting Ensembl VEP data from server ...", file=sys.stderr) if VERBOSE else None
+		ensembl_json_data = (Ensembl.get_bulk_variant_data(ensembl_keystrings, verbose=VERBOSE))
+		print("... done", file=sys.stderr) if VERBOSE else None
 		if CACHE:
+			sys.stderr.write("Writing Ensembl VEP data to cache ...") if VERBOSE else None
 			outfile = open(ensembl_cache_fname, 'w')
 			json.dump(ensembl_json_data, outfile)
 			outfile.close()
+	print(" done", file=sys.stderr) if VERBOSE else None
 	return ensembl_json_data
+
+
+def handle_globvars(output, verbose, cache, refresh):
+	global OUTPUT
+	global VERBOSE
+	global CACHE
+	global REFRESH
+	OUTPUT = output
+	VERBOSE = verbose
+	CACHE = cache
+	REFRESH = refresh
 
 
 @click.command(context_settings=dict(max_content_width=shutil.get_terminal_size().columns))
@@ -199,20 +229,17 @@ def obtain_ensembl_data(ensembl_keystrings: 'List[str]'):
 @click.argument('output', type=click.File('w'), default=sys.stdout, required=False)
 @click.option('--exac-fields', '-e', type=str, default=None, help="csv of additional exac fields to include, formatted: parent.child.grandchild, as if from: http://exac.hms.harvard.edu/rest/variant")
 @click.option('--exac-field-default', '-d', type=(str, str), multiple=True, default=None, required=False, help='supply default value for exac field:  <FIELD VALUE>')
-@click.option('--cache', '-c', default=False, is_flag=True)
-@click.option('--verbose', '-v', default=False,  is_flag=True)
-def annotate(filename, output, exac_fields, exac_field_default, cache, verbose):
+@click.option('--cache', '-c', default=False, is_flag=True, help="if cache doesn't exist yet, save server response to file, if cache exists, read it instead")
+@click.option('--verbose', '-v', default=False,  is_flag=True, help="verbose output to stderr")
+@click.option('--refresh', '-r', default=False, is_flag=True, help="force a refresh of cache")
+def annotate(filename, output, exac_fields, exac_field_default, cache, verbose, refresh):
 	"""
 Annotate entries in a vcf file\n
 FILENAME required; path to an input vcf file\n
 OUTPUT optional; path to output, will default to sys.stdout
 """
-	global OUTPUT
-	global VERBOSE
-	global CACHE
-	OUTPUT = output
-	VERBOSE = verbose
-	CACHE = cache
+	#handle output filehandle and global flags
+	handle_globvars(output, verbose, cache, refresh)
 
 	#add any additional requested ExAC fields
 	handle_field_args(exac_fields, exac_field_default)
