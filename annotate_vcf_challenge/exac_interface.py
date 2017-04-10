@@ -44,6 +44,8 @@ consequence_severity = {
 
 
 class ExAC:
+	exac_base_url = "http://exac.hms.harvard.edu"
+
 	@staticmethod
 	def split_keystring(keystring:str):
 		splitstr = keystring.split('-')
@@ -100,8 +102,6 @@ class ExAC:
 	@staticmethod
 	def make_keystring_for_vcfentry(entry: vcfrecord):
 		return ["%s-%s-%s-%s" % (entry.CHROM, entry.POS, entry.REF, x) for x in entry.ALT]
-
-	exac_base_url = "http://exac.hms.harvard.edu"
 
 	@staticmethod
 	def variant_url(keystring, specifier=None):

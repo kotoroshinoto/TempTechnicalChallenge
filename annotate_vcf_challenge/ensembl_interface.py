@@ -30,6 +30,7 @@ class Ensembl:
 	@staticmethod
 	def get_variant_data(urlkeystring):
 		headers = {'Accept': 'application/json'}
+		#we are assuming that convert_exac_keystring_to_url was already used to transform this argument
 		url = Ensembl.get_vep_variant_url(urlkeystring)
 		return requests.get(url, headers=headers)
 
