@@ -20,14 +20,12 @@ class Ensembl:
 		return "%s %d . %s %s" % (chrom, pos, ref, alt)
 
 	@staticmethod
-	def get_vep_variant_url(urlkeystring):
-		url_suffix="vep/homo_sapiens/region"
-		return "%s/%s/%s" % (Ensembl.base_url, url_suffix, urlkeystring)
-
-	@staticmethod
-	def get_vep_variant_bulk_url():
+	def get_vep_variant_url(urlkeystring=None):
 		url_suffix = "vep/homo_sapiens/region"
-		return "%s/%s" % (Ensembl.base_url, url_suffix)
+		if urlkeystring is None:
+			return "%s/%s" % (Ensembl.base_url, url_suffix)
+		else:
+			return "%s/%s/%s" % (Ensembl.base_url, url_suffix, urlkeystring)
 
 	@staticmethod
 	def get_variant_data(urlkeystring):
@@ -38,7 +36,7 @@ class Ensembl:
 	@staticmethod
 	def get_bulk_variant_data(keystr_list: 'List[str]', verbose=False):
 		headers ={"Content-Type": "application/json", 'Accept': 'application/json'}
-		url = Ensembl.get_vep_variant_bulk_url()
+		url = Ensembl.get_vep_variant_url()
 		#can only handle 300 at once
 		result = []
 		buff = []
